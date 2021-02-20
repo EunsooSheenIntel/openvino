@@ -15,7 +15,6 @@ bool PermuteKernelBase::Validate(const Params& p, const optional_params& o) cons
             return false;
         }
     }
-
     return true;
 }
 
