@@ -32,6 +32,8 @@
 #include <gmock/gmock.h>
 #include <limits>
 
+#include <api/eltwise.hpp>
+
 using namespace cldnn;
 using namespace tests;
 using namespace testing;
@@ -1531,52 +1533,29 @@ TEST(permute_gpu_f32_tile_8x8_4x4, xf_remainder_bfwzyx_0_5_4_1_2_3) {
     }
 }
 
-// #define EUNSOO_PERMUTE_TEST_WITH_REORDER
 
-TEST(permute_gpu_f32, eunsoo_basic_bfyx_permute_8x8_0_1_3_2)
+#if 1
+////////////////////////////////////////////////////////
+// permute with input in b_fs_yx_fsv16 format - zero-padded
+////////////////////////////////////////////////////////
+TEST(permute_gpu_f32, eunsoo_basic_bfyx_permute_ref_zero_padded)
 {
     const auto &engine = get_test_engine();
 
-    // auto input = memory::allocate(engine, {data_types::f32, format::bfyx, {1, 32, 2, 2}});
-    // std::vector<float> input_values;
-    // input_values.reserve(128);
-    // for (int i=0;i<128;++i)
-    // {
-    //     input_values.push_back(i);
-    // }
-    // set_values(input, input_values);
-    // topology topology(
-    //     input_layout("input", input.get_layout()),
-    //     reorder("reorder", "input", {data_types::f32, format::b_fs_yx_fsv16, {1, 32, 2, 2}}));
-
-    // for (int i = 0; i < 128; i++)
-    // {
-    //     std::cout << output_ptr[i] << ".f, ";
-    // }
-
-    auto input = memory::allocate(engine, {data_types::f32, format::b_fs_yx_fsv16, {1, 32, 2, 2}});
-    set_values(input, {
-        0.f, 4.f, 8.f, 12.f, 16.f, 20.f, 24.f, 28.f, 32.f, 36.f, 40.f, 44.f,
-        48.f, 52.f, 56.f, 60.f, 1.f, 5.f, 9.f, 13.f, 17.f, 21.f, 25.f, 29.f,
-        33.f, 37.f, 41.f, 45.f, 49.f, 53.f, 57.f, 61.f, 2.f, 6.f, 10.f, 14.f,
-         18.f, 22.f, 26.f, 30.f, 34.f, 38.f, 42.f, 46.f, 50.f, 54.f, 58.f, 62.f,
-         3.f, 7.f, 11.f, 15.f, 19.f, 23.f, 27.f, 31.f, 35.f, 39.f, 43.f, 47.f, 51.f,
-         55.f, 59.f, 63.f, 64.f, 68.f, 72.f, 76.f, 80.f, 84.f, 88.f, 92.f, 96.f, 100.f,
-         104.f, 108.f, 112.f, 116.f, 120.f, 124.f, 65.f, 69.f, 73.f, 77.f, 81.f, 85.f,
-         89.f, 93.f, 97.f, 101.f, 105.f, 109.f, 113.f, 117.f, 121.f, 125.f, 66.f,
-         70.f, 74.f, 78.f, 82.f, 86.f, 90.f, 94.f, 98.f, 102.f, 106.f, 110.f,
-         114.f, 118.f, 122.f, 126.f, 67.f, 71.f, 75.f, 79.f, 83.f, 87.f, 91.f,
-         95.f, 99.f, 103.f, 107.f, 111.f, 115.f, 119.f, 123.f, 127.f});
-
+    int total = 1 * 16 * 1 * 4;
+    auto input = memory::allocate(engine, {data_types::f32, format::bfyx, {1, 16, 1, 4}});
+    std::vector<float> input_values;
+    input_values.reserve(total);
+    for (int i=0;i<total;++i)
+    {
+        input_values.push_back(i);
+    }
+    set_values(input, input_values);
 
     topology topology(
         input_layout("input", input.get_layout()),
-#ifdef EUNSOO_PERMUTE_TEST_WITH_REORDER
-        reorder("reorder", "input", {data_types::f32, format::bfyx, {1, 32, 2, 2}}),
-        permute("permute", "reorder", {0, 3, 1, 2}));
-#else
-        permute("permute", "input", { 0, 3, 1, 2 }));
-#endif
+        reorder("reorder", "input", {data_types::f32, format::b_fs_yx_fsv16, {1, 16, 1, 4}}),
+        permute("permute", "reorder", {0, 3, 2, 1}));
 
     network network(engine, topology);
     network.set_input_data("input", input);
@@ -1584,19 +1563,124 @@ TEST(permute_gpu_f32, eunsoo_basic_bfyx_permute_8x8_0_1_3_2)
     auto outputs = network.execute();
     EXPECT_EQ(outputs.size(), size_t(1));
     EXPECT_EQ(outputs.begin()->first, "permute");
-
     auto output = outputs.begin()->second.get_memory();
-
-    float answers[128] = {
-        0.f,   4.f,   8.f,  12.f,  16.f,  20.f,  24.f,  28.f,  32.f,  36.f,  40.f,  44.f,  48.f,  52.f,  56.f,  60.f,  64.f,  68.f,  72.f,  76.f,  80.f,  84.f,  88.f,  92.f,  96.f, 100.f, 104.f, 108.f, 112.f, 116.f, 120.f, 124.f,   1.f,   5.f,   9.f,  13.f,  17.f,  21.f,  25.f,  29.f,  33.f,  37.f,  41.f,  45.f,  49.f,  53.f,  57.f,  61.f,  65.f,  69.f,  73.f,  77.f,  81.f,  85.f,  89.f,  93.f,  97.f, 101.f, 105.f, 109.f, 113.f, 117.f, 121.f, 125.f,
-        2.f,   6.f,  10.f,  14.f,  18.f,  22.f,  26.f,  30.f,  34.f,  38.f,  42.f,  46.f,  50.f,  54.f,  58.f,  62.f,  66.f,  70.f,  74.f,  78.f,  82.f,  86.f,  90.f,  94.f,  98.f, 102.f, 106.f, 110.f, 114.f, 118.f, 122.f, 126.f,   3.f,   7.f,  11.f,  15.f,  19.f,  23.f,  27.f,  31.f,  35.f,  39.f,  43.f,  47.f,  51.f,  55.f,  59.f,  63.f,  67.f,  71.f,  75.f,  79.f,  83.f,  87.f,  91.f,  95.f,  99.f, 103.f, 107.f, 111.f, 115.f, 119.f, 123.f, 127.f
-    };
-
     auto output_ptr = output.pointer<float>();
 
+    float answers[16*4*4] = {
+        0.f, 1.f, 2.f, 3.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        4.f, 5.f, 6.f, 7.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        8.f, 9.f, 10.f, 11.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        12.f, 13.f, 14.f, 15.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        16.f, 17.f, 18.f, 19.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        20.f, 21.f, 22.f, 23.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        24.f, 25.f, 26.f, 27.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        28.f, 29.f, 30.f, 31.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        32.f, 33.f, 34.f, 35.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        36.f, 37.f, 38.f, 39.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        40.f, 41.f, 42.f, 43.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        44.f, 45.f, 46.f, 47.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        48.f, 49.f, 50.f, 51.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        52.f, 53.f, 54.f, 55.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        56.f, 57.f, 58.f, 59.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        60.f, 61.f, 62.f, 63.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f
+    };
 
-    for (int i = 0; i < 128; i++)
+
+
+    for (int i = 0; i < total; i++)
     {
         EXPECT_FLOAT_EQ(answers[i], output_ptr[i]);
     }
 }
+#endif
+
+#if 1
+// #define EUNSOO_PERMUTE_REF_PRINT_OUTPUT
+// #define EUNSOO_PERMUTE_REF_EXPECTED_OUTPUT
+
+////////////////////////////////////////////////////////
+// permute with input in b_fs_yx_fsv16 format
+////////////////////////////////////////////////////////
+TEST(permute_gpu_f32, eunsoo_basic_bfyx_permute_ref_normal)
+{
+    const auto &engine = get_test_engine();
+    constexpr int total = 16 * 2* 16;
+    auto input = memory::allocate(engine, {data_types::f32, format::bfyx, {1, 16, 2, 16}});
+    std::vector<float> input_values;
+    input_values.reserve(total);
+    for (int i=0;i<total;++i)
+    {
+        input_values.push_back(i);
+    }
+    set_values(input, input_values);
+#ifndef EUNSOO_PERMUTE_REF_EXPECTED_OUTPUT
+    topology topology(
+        input_layout("input", input.get_layout()),
+        reorder("output1", "permute1", {data_types::f32, format::b_fs_yx_fsv16, {1, 16, 2, 16}}),
+        permute("permute1", "input", {0,3,2,1})
+    );
+
+    network network(engine, topology);
+    network.set_input_data("input", input);
+
+    auto outputs = network.execute();
+    auto output = outputs.begin()->second.get_memory();
+    auto output_ptr = output.pointer<float>();
+
+#ifdef EUNSOO_PERMUTE_REF_PRINT_OUTPUT
+    for (int i = 0; i < total; i++)
+    {
+        std::cout << output_ptr[i] << ".f, ";
+        if ((i+1)%32 == 0)
+        {
+            std::cout << '\n';
+        }
+    }
+#endif
+
+    float answers[total] = {
+        0.f, 2.f, 4.f, 6.f, 8.f, 10.f, 12.f, 14.f, 16.f, 18.f, 20.f, 22.f, 24.f, 26.f, 28.f, 30.f, 1.f, 3.f, 5.f, 7.f, 9.f, 11.f, 13.f, 15.f, 17.f, 19.f, 21.f, 23.f, 25.f, 27.f, 29.f, 31.f,
+        32.f, 34.f, 36.f, 38.f, 40.f, 42.f, 44.f, 46.f, 48.f, 50.f, 52.f, 54.f, 56.f, 58.f, 60.f, 62.f, 33.f, 35.f, 37.f, 39.f, 41.f, 43.f, 45.f, 47.f, 49.f, 51.f, 53.f, 55.f, 57.f, 59.f, 61.f, 63.f,
+        64.f, 66.f, 68.f, 70.f, 72.f, 74.f, 76.f, 78.f, 80.f, 82.f, 84.f, 86.f, 88.f, 90.f, 92.f, 94.f, 65.f, 67.f, 69.f, 71.f, 73.f, 75.f, 77.f, 79.f, 81.f, 83.f, 85.f, 87.f, 89.f, 91.f, 93.f, 95.f,
+        96.f, 98.f, 100.f, 102.f, 104.f, 106.f, 108.f, 110.f, 112.f, 114.f, 116.f, 118.f, 120.f, 122.f, 124.f, 126.f, 97.f, 99.f, 101.f, 103.f, 105.f, 107.f, 109.f, 111.f, 113.f, 115.f, 117.f, 119.f, 121.f, 123.f, 125.f, 127.f,
+        128.f, 130.f, 132.f, 134.f, 136.f, 138.f, 140.f, 142.f, 144.f, 146.f, 148.f, 150.f, 152.f, 154.f, 156.f, 158.f, 129.f, 131.f, 133.f, 135.f, 137.f, 139.f, 141.f, 143.f, 145.f, 147.f, 149.f, 151.f, 153.f, 155.f, 157.f, 159.f,
+        160.f, 162.f, 164.f, 166.f, 168.f, 170.f, 172.f, 174.f, 176.f, 178.f, 180.f, 182.f, 184.f, 186.f, 188.f, 190.f, 161.f, 163.f, 165.f, 167.f, 169.f, 171.f, 173.f, 175.f, 177.f, 179.f, 181.f, 183.f, 185.f, 187.f, 189.f, 191.f,
+        192.f, 194.f, 196.f, 198.f, 200.f, 202.f, 204.f, 206.f, 208.f, 210.f, 212.f, 214.f, 216.f, 218.f, 220.f, 222.f, 193.f, 195.f, 197.f, 199.f, 201.f, 203.f, 205.f, 207.f, 209.f, 211.f, 213.f, 215.f, 217.f, 219.f, 221.f, 223.f,
+        224.f, 226.f, 228.f, 230.f, 232.f, 234.f, 236.f, 238.f, 240.f, 242.f, 244.f, 246.f, 248.f, 250.f, 252.f, 254.f, 225.f, 227.f, 229.f, 231.f, 233.f, 235.f, 237.f, 239.f, 241.f, 243.f, 245.f, 247.f, 249.f, 251.f, 253.f, 255.f,
+        256.f, 258.f, 260.f, 262.f, 264.f, 266.f, 268.f, 270.f, 272.f, 274.f, 276.f, 278.f, 280.f, 282.f, 284.f, 286.f, 257.f, 259.f, 261.f, 263.f, 265.f, 267.f, 269.f, 271.f, 273.f, 275.f, 277.f, 279.f, 281.f, 283.f, 285.f, 287.f,
+        288.f, 290.f, 292.f, 294.f, 296.f, 298.f, 300.f, 302.f, 304.f, 306.f, 308.f, 310.f, 312.f, 314.f, 316.f, 318.f, 289.f, 291.f, 293.f, 295.f, 297.f, 299.f, 301.f, 303.f, 305.f, 307.f, 309.f, 311.f, 313.f, 315.f, 317.f, 319.f,
+        320.f, 322.f, 324.f, 326.f, 328.f, 330.f, 332.f, 334.f, 336.f, 338.f, 340.f, 342.f, 344.f, 346.f, 348.f, 350.f, 321.f, 323.f, 325.f, 327.f, 329.f, 331.f, 333.f, 335.f, 337.f, 339.f, 341.f, 343.f, 345.f, 347.f, 349.f, 351.f,
+        352.f, 354.f, 356.f, 358.f, 360.f, 362.f, 364.f, 366.f, 368.f, 370.f, 372.f, 374.f, 376.f, 378.f, 380.f, 382.f, 353.f, 355.f, 357.f, 359.f, 361.f, 363.f, 365.f, 367.f, 369.f, 371.f, 373.f, 375.f, 377.f, 379.f, 381.f, 383.f,
+        384.f, 386.f, 388.f, 390.f, 392.f, 394.f, 396.f, 398.f, 400.f, 402.f, 404.f, 406.f, 408.f, 410.f, 412.f, 414.f, 385.f, 387.f, 389.f, 391.f, 393.f, 395.f, 397.f, 399.f, 401.f, 403.f, 405.f, 407.f, 409.f, 411.f, 413.f, 415.f,
+        416.f, 418.f, 420.f, 422.f, 424.f, 426.f, 428.f, 430.f, 432.f, 434.f, 436.f, 438.f, 440.f, 442.f, 444.f, 446.f, 417.f, 419.f, 421.f, 423.f, 425.f, 427.f, 429.f, 431.f, 433.f, 435.f, 437.f, 439.f, 441.f, 443.f, 445.f, 447.f,
+        448.f, 450.f, 452.f, 454.f, 456.f, 458.f, 460.f, 462.f, 464.f, 466.f, 468.f, 470.f, 472.f, 474.f, 476.f, 478.f, 449.f, 451.f, 453.f, 455.f, 457.f, 459.f, 461.f, 463.f, 465.f, 467.f, 469.f, 471.f, 473.f, 475.f, 477.f, 479.f,
+        480.f, 482.f, 484.f, 486.f, 488.f, 490.f, 492.f, 494.f, 496.f, 498.f, 500.f, 502.f, 504.f, 506.f, 508.f, 510.f, 481.f, 483.f, 485.f, 487.f, 489.f, 491.f, 493.f, 495.f, 497.f, 499.f, 501.f, 503.f, 505.f, 507.f, 509.f, 511.f,
+    };
+
+
+    for (int i = 0; i < total; i++)
+    {
+        EXPECT_FLOAT_EQ(answers[i], output_ptr[i]);
+    }
+#else
+    topology topology(
+        input_layout("input", input.get_layout()),
+        permute("permute1", "input", {0,3,2,1}),
+        reorder("output1", "permute1", {data_types::f32, format::b_fs_yx_fsv16, {1, 16, 2, 16}})
+    );
+    network network(engine, topology);
+    network.set_input_data("input", input);
+    auto outputs = network.execute();
+    auto output = outputs.begin()->second.get_memory();
+    auto output_ptr = output.pointer<float>();
+    for (int i = 0; i < total; i++)
+    {
+        std::cout << output_ptr[i] << ".f, ";
+        if ((i+1)%32 == 0)
+        {
+            std::cout << '\n';
+        }
+    }
+#endif
+}
+#endif
