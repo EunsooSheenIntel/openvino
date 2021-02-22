@@ -1530,3 +1530,73 @@ TEST(permute_gpu_f32_tile_8x8_4x4, xf_remainder_bfwzyx_0_5_4_1_2_3) {
         EXPECT_FLOAT_EQ(answers[i], output_ptr[i]);
     }
 }
+
+// #define EUNSOO_PERMUTE_TEST_WITH_REORDER
+
+TEST(permute_gpu_f32, eunsoo_basic_bfyx_permute_8x8_0_1_3_2)
+{
+    const auto &engine = get_test_engine();
+
+    // auto input = memory::allocate(engine, {data_types::f32, format::bfyx, {1, 32, 2, 2}});
+    // std::vector<float> input_values;
+    // input_values.reserve(128);
+    // for (int i=0;i<128;++i)
+    // {
+    //     input_values.push_back(i);
+    // }
+    // set_values(input, input_values);
+    // topology topology(
+    //     input_layout("input", input.get_layout()),
+    //     reorder("reorder", "input", {data_types::f32, format::b_fs_yx_fsv16, {1, 32, 2, 2}}));
+
+    // for (int i = 0; i < 128; i++)
+    // {
+    //     std::cout << output_ptr[i] << ".f, ";
+    // }
+
+    auto input = memory::allocate(engine, {data_types::f32, format::b_fs_yx_fsv16, {1, 32, 2, 2}});
+    set_values(input, {
+        0.f, 4.f, 8.f, 12.f, 16.f, 20.f, 24.f, 28.f, 32.f, 36.f, 40.f, 44.f,
+        48.f, 52.f, 56.f, 60.f, 1.f, 5.f, 9.f, 13.f, 17.f, 21.f, 25.f, 29.f,
+        33.f, 37.f, 41.f, 45.f, 49.f, 53.f, 57.f, 61.f, 2.f, 6.f, 10.f, 14.f,
+         18.f, 22.f, 26.f, 30.f, 34.f, 38.f, 42.f, 46.f, 50.f, 54.f, 58.f, 62.f,
+         3.f, 7.f, 11.f, 15.f, 19.f, 23.f, 27.f, 31.f, 35.f, 39.f, 43.f, 47.f, 51.f,
+         55.f, 59.f, 63.f, 64.f, 68.f, 72.f, 76.f, 80.f, 84.f, 88.f, 92.f, 96.f, 100.f,
+         104.f, 108.f, 112.f, 116.f, 120.f, 124.f, 65.f, 69.f, 73.f, 77.f, 81.f, 85.f,
+         89.f, 93.f, 97.f, 101.f, 105.f, 109.f, 113.f, 117.f, 121.f, 125.f, 66.f,
+         70.f, 74.f, 78.f, 82.f, 86.f, 90.f, 94.f, 98.f, 102.f, 106.f, 110.f,
+         114.f, 118.f, 122.f, 126.f, 67.f, 71.f, 75.f, 79.f, 83.f, 87.f, 91.f,
+         95.f, 99.f, 103.f, 107.f, 111.f, 115.f, 119.f, 123.f, 127.f});
+
+
+    topology topology(
+        input_layout("input", input.get_layout()),
+#ifdef EUNSOO_PERMUTE_TEST_WITH_REORDER
+        reorder("reorder", "input", {data_types::f32, format::bfyx, {1, 32, 2, 2}}),
+        permute("permute", "reorder", {0, 3, 1, 2}));
+#else
+        permute("permute", "input", { 0, 3, 1, 2 }));
+#endif
+
+    network network(engine, topology);
+    network.set_input_data("input", input);
+
+    auto outputs = network.execute();
+    EXPECT_EQ(outputs.size(), size_t(1));
+    EXPECT_EQ(outputs.begin()->first, "permute");
+
+    auto output = outputs.begin()->second.get_memory();
+
+    float answers[128] = {
+        0.f,   4.f,   8.f,  12.f,  16.f,  20.f,  24.f,  28.f,  32.f,  36.f,  40.f,  44.f,  48.f,  52.f,  56.f,  60.f,  64.f,  68.f,  72.f,  76.f,  80.f,  84.f,  88.f,  92.f,  96.f, 100.f, 104.f, 108.f, 112.f, 116.f, 120.f, 124.f,   1.f,   5.f,   9.f,  13.f,  17.f,  21.f,  25.f,  29.f,  33.f,  37.f,  41.f,  45.f,  49.f,  53.f,  57.f,  61.f,  65.f,  69.f,  73.f,  77.f,  81.f,  85.f,  89.f,  93.f,  97.f, 101.f, 105.f, 109.f, 113.f, 117.f, 121.f, 125.f,
+        2.f,   6.f,  10.f,  14.f,  18.f,  22.f,  26.f,  30.f,  34.f,  38.f,  42.f,  46.f,  50.f,  54.f,  58.f,  62.f,  66.f,  70.f,  74.f,  78.f,  82.f,  86.f,  90.f,  94.f,  98.f, 102.f, 106.f, 110.f, 114.f, 118.f, 122.f, 126.f,   3.f,   7.f,  11.f,  15.f,  19.f,  23.f,  27.f,  31.f,  35.f,  39.f,  43.f,  47.f,  51.f,  55.f,  59.f,  63.f,  67.f,  71.f,  75.f,  79.f,  83.f,  87.f,  91.f,  95.f,  99.f, 103.f, 107.f, 111.f, 115.f, 119.f, 123.f, 127.f
+    };
+
+    auto output_ptr = output.pointer<float>();
+
+
+    for (int i = 0; i < 128; i++)
+    {
+        EXPECT_FLOAT_EQ(answers[i], output_ptr[i]);
+    }
+}
